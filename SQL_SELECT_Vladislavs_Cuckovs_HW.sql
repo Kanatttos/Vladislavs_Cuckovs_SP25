@@ -3,11 +3,11 @@
 --    alphabetical
 SELECT 
     f.title
-FROM film f
+FROM public.film f
 -- Joining film_category to get the category of the film
-INNER JOIN film_category fc ON fc.film_id = f.film_id  
+INNER JOIN public.film_category fc ON fc.film_id = f.film_id  
 -- Joining category to filter for 'Animation' movies
-INNER JOIN category c ON c.category_id = fc.category_id  
+INNER JOIN public.category c ON c.category_id = fc.category_id  
 -- Applying filters:
 WHERE 
     c.name = 'Animation'  -- Selecting only animation movies
@@ -21,17 +21,17 @@ ORDER BY f.title ASC;
 SELECT 
     CONCAT(TRIM(a.address), ' ', COALESCE(TRIM(a.address2), '')) AS full_address, -- Combining address fields
     COALESCE(SUM(p.amount), 0) AS revenue  -- Ensuring revenue is never NULL
-FROM store s
--- Joining address table to get store location details
-INNER JOIN address a ON s.address_id = a.address_id  
--- Joining inventory to associate stores with their inventory
-INNER JOIN inventory i ON i.store_id = s.store_id  
--- Joining rental to find transactions that happened after March 2017
-INNER JOIN rental r ON r.inventory_id = i.inventory_id  
--- Joining payment to calculate total revenue
-INNER JOIN payment p ON p.rental_id = r.rental_id  
--- Filtering for rentals made after March 31, 2017
-WHERE r.rental_date > '2017-03-31 23:59:59'  
+FROM public.payment p
+-- Joining rental to associate payments with rentals
+INNER JOIN public.rental r ON p.rental_id = r.rental_id
+-- Joining inventory to associate rentals with store inventory
+INNER JOIN public.inventory i ON r.inventory_id = i.inventory_id
+-- Joining store to find out which store the inventory belongs to
+INNER JOIN public.store s ON i.store_id = s.store_id
+-- Joining address to get store location details
+INNER JOIN public.address a ON s.address_id = a.address_id  
+-- Filtering for payments made from March 1, 2017, onward
+WHERE p.payment_date >= '2017-03-01 00:00:00'  
 -- Grouping by the actual address fields (not the alias)
 GROUP BY a.address, a.address2  
 -- Sorting results by revenue in descending order
@@ -41,14 +41,14 @@ ORDER BY revenue DESC;
 --1.3)Top-5 actors by number of movies (released after 2015) they took part in (columns: first_name, last_name, number_of_movies, sorted by number_of_movies in descending order)
 SELECT 
     a.first_name, 
-    a.last_name, 
+    a.last_name,
     COUNT(fa.film_id) AS number_of_movies  -- Counting the number of movies each actor participated in
 FROM actor a
 -- Joining the bridge table (film_actor) to link actors with movies
 INNER JOIN film_actor fa ON a.actor_id = fa.actor_id
 -- Joining the film table to filter based on the release year
 INNER JOIN film f ON fa.film_id = f.film_id
-WHERE f.release_year > 2015  -- Only consider movies released after 2015
+WHERE f.release_year >= 2015  -- Only consider movies released after 2015
 GROUP BY a.actor_id, a.first_name, a.last_name  -- aggregation
 ORDER BY 
     number_of_movies DESC,  -- Sorting by the number of movies in descending order
@@ -121,25 +121,15 @@ WITH movie_rentals AS (
     SELECT 
         i.film_id, 
         COUNT(r.rental_id) AS rental_count
-    FROM rental r
-    INNER JOIN inventory i ON r.inventory_id = i.inventory_id
+    FROM public.rental r
+    INNER JOIN public.inventory i ON r.inventory_id = i.inventory_id
     GROUP BY i.film_id
-),
-
-top_movies AS (
-    -- Get the top 5 most rented movies
-    SELECT 
-        film_id, 
-        rental_count
-    FROM movie_rentals
-    ORDER BY rental_count DESC
-    LIMIT 5
 )
 
--- Retrieve movie details and expected audience age
+-- Retrieve movie details and expected audience age directly, without an extra CTE
 SELECT 
     f.title, 
-    tm.rental_count, 
+    mr.rental_count, 
     f.rating, 
     CASE 
         WHEN f.rating = 'G' THEN 'All ages'
@@ -149,8 +139,10 @@ SELECT
         WHEN f.rating = 'NC-17' THEN '18+'
         ELSE 'Unknown'
     END AS expected_audience_age
-FROM top_movies tm
-INNER JOIN film f ON tm.film_id = f.film_id;
+FROM movie_rentals mr
+INNER JOIN public.film f ON mr.film_id = f.film_id
+ORDER BY mr.rental_count DESC  -- Sorting by rental count
+LIMIT 5;  -- Get the top 5 movies only
 
 --3
 --Which actors/actresses didn't act for a longer period of time than the others? 
