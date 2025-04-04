@@ -101,3 +101,6 @@ WHERE table_name LIKE '%table_to_delete%';
 --2.VACCUUM FULL VERBOSE took 4.8 seconds to perform and decreese table space by 192MB to 383MB.
 --3.TRUNCATE was the longest to perform -13 seconds, but it free all the space as 0 bytes
 -- All these function has their own advantages of use.
+--DELETE : Can delete specific records using WHERE clause, can be rolled back
+--TRUNCATE: delete all immediately, very fast
+--VACUUM FULL VERBOSE: minimize table size physically, optimize space of table, improve performance of the table
