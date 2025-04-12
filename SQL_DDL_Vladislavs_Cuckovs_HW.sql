@@ -1,5 +1,5 @@
-CREATE SCHEMA IF NOT EXISTS subway_system;
 CREATE DATABASE subway_system;
+CREATE SCHEMA IF NOT EXISTS subway_system;
 
 -- 1. Train table
 CREATE TABLE IF NOT EXISTS subway_system.train(
@@ -24,13 +24,33 @@ ON CONFLICT DO NOTHING;
 SELECT  * FROM subway_system.train;
 
 --Add row
--- Set the default value
-ALTER TABLE subway_system.train
-ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE;
+-- 3. Ensure 'record_ts' column and constraint are present (fully rerunnable)
+DO $$
+BEGIN
+    -- Add column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'train'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.train ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
 
--- Add a check constraint
-ALTER TABLE subway_system.train
-ADD CONSTRAINT chk_record_ts CHECK (record_ts > '2000-01-01');
+    -- Set default value for the column (even if it exists, update it)
+    EXECUTE 'ALTER TABLE subway_system.train ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add check constraint if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'train'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.train ADD CONSTRAINT chk_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.train;
@@ -54,9 +74,32 @@ ON CONFLICT DO NOTHING;
 SELECT  * FROM subway_system.station;
 
 --Add row
-ALTER TABLE subway_system.station
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'station'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.station ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
+
+    -- Set default (safe even if it already exists)
+    EXECUTE 'ALTER TABLE subway_system.station ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add check constraint if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'station'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_station_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.station ADD CONSTRAINT chk_station_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.station;
@@ -86,9 +129,32 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.employees e WHERE e.name = new_emp
 SELECT  * FROM subway_system.employees;
 
 --Add row
-ALTER TABLE subway_system.employees
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'employees'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.employees ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
+
+    -- Set default value explicitly (safe even if column already exists)
+    EXECUTE 'ALTER TABLE subway_system.employees ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add check constraint if not already present
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'employees'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_employees_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.employees ADD CONSTRAINT chk_employees_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.employees;
@@ -114,10 +180,32 @@ ON CONFLICT DO NOTHING;
 SELECT  * FROM subway_system.lines;
 
 --Add row
-ALTER TABLE subway_system.lines
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Check if column exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'lines'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.lines ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
 
+    -- Set default value explicitly
+    EXECUTE 'ALTER TABLE subway_system.lines ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add CHECK constraint only if not already defined
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'lines'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_lines_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.lines ADD CONSTRAINT chk_lines_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.lines;
 
@@ -150,9 +238,32 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.line_requirements l WHERE l.line_i
 SELECT  * FROM subway_system.line_requirements;
 
 --Add row
-ALTER TABLE subway_system.line_requirements
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column only if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'line_requirements'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.line_requirements ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
+
+    -- Set default explicitly (safe even if already exists)
+    EXECUTE 'ALTER TABLE subway_system.line_requirements ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add CHECK constraint if not already present
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'line_requirements'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_line_requirements_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.line_requirements ADD CONSTRAINT chk_line_requirements_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.line_requirements;
@@ -188,9 +299,32 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.routes r WHERE r.line_id = new_rou
 SELECT  * FROM subway_system.routes;
 
 --Add row
-ALTER TABLE subway_system.routes
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'routes'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.routes ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
+
+    -- Ensure default is set (safe to rerun)
+    EXECUTE 'ALTER TABLE subway_system.routes ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add CHECK constraint safely
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'routes'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_routes_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.routes ADD CONSTRAINT chk_routes_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.routes;
@@ -208,8 +342,8 @@ CREATE TABLE IF NOT EXISTS subway_system.schedules (
 INSERT INTO  subway_system.schedules (route_id, departure_time, arrival_time )
 SELECT * FROM(
 VALUES 
-((SELECT route_id FROM subway_system.routes WHERE line_id = 1), '6:00:00'::TIME, '6:42:00'::TIME),
-((SELECT route_id FROM subway_system.routes WHERE line_id = 2), '16:00:00'::TIME, '16:52:00'::TIME)) AS new_schedules(route_id, departure_time, arrival_time )
+((SELECT route_id FROM subway_system.routes WHERE line_id = 1 LIMIT 1), '6:00:00'::TIME, '6:42:00'::TIME),
+((SELECT route_id FROM subway_system.routes WHERE line_id = 2 LIMIT 1), '16:00:00'::TIME, '16:52:00'::TIME)) AS new_schedules(route_id, departure_time, arrival_time )
 WHERE NOT EXISTS (SELECT 1 FROM subway_system.schedules s WHERE s.route_id = new_schedules.route_id 
 														AND s.departure_time = new_schedules.departure_time
 														AND s.arrival_time = new_schedules.arrival_time)
@@ -219,9 +353,32 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.schedules s WHERE s.route_id = new
 SELECT  * FROM subway_system.schedules;
 
 --Add row
-ALTER TABLE subway_system.schedules
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if not exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'schedules'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.schedules ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
+
+    -- Set default explicitly
+    EXECUTE 'ALTER TABLE subway_system.schedules ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Add check constraint safely
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'schedules'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_schedules_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.schedules ADD CONSTRAINT chk_schedules_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.schedules;
@@ -240,24 +397,46 @@ CREATE TABLE IF NOT EXISTS subway_system.route_stops (
 INSERT INTO  subway_system.route_stops (route_id, station_id, arrival_time,departure_time )
 SELECT * FROM(
 VALUES 
-((SELECT route_id FROM subway_system.routes WHERE line_id = 1), (SELECT station_id FROM subway_system.station WHERE UPPER(name) LIKE UPPER('City Hall')), 
+((SELECT route_id FROM subway_system.routes WHERE line_id = 1 LIMIT 1), (SELECT station_id FROM subway_system.station WHERE UPPER(name) LIKE UPPER('City Hall')), 
 '6:42:00'::TIME, '6:55:00'::TIME),
-((SELECT route_id FROM subway_system.routes WHERE line_id = 2), (SELECT station_id FROM subway_system.station WHERE UPPER(name) LIKE UPPER('Midwest')),
+((SELECT route_id FROM subway_system.routes WHERE line_id = 2 LIMIT 1), (SELECT station_id FROM subway_system.station WHERE UPPER(name) LIKE UPPER('Midwest')),
 '16:52:00'::TIME, '16:57:00'::TIME)) AS new_route_stops (route_id, station_id, arrival_time,departure_time )
 WHERE NOT EXISTS (SELECT 1 FROM subway_system.route_stops r WHERE r.route_id = new_route_stops.route_id 
 														AND r.station_id = new_route_stops.station_id
 														AND r.arrival_time = new_route_stops.arrival_time
 														AND r.departure_time = new_route_stops.departure_time)
-
 ;
 
 --Show added data in table
 SELECT  * FROM subway_system.route_stops;
 
 --Add row
-ALTER TABLE subway_system.route_stops
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Check and add column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'route_stops'
+          AND column_name = 'record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.route_stops ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE';
+    END IF;
+
+    -- Set default value for the column
+    EXECUTE 'ALTER TABLE subway_system.route_stops ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE';
+
+    -- Check and add constraint if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'route_stops'
+          AND constraint_type = 'CHECK'
+          AND constraint_name = 'chk_route_stops_record_ts'
+    ) THEN
+        EXECUTE 'ALTER TABLE subway_system.route_stops ADD CONSTRAINT chk_route_stops_record_ts CHECK (record_ts > ''2000-01-01'')';
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.route_stops;
@@ -275,12 +454,12 @@ CREATE TABLE IF NOT EXISTS subway_system.train_operations (
 INSERT INTO  subway_system.train_operations (train_id, route_id, schedule_id,operator_id )
 SELECT * FROM(
 VALUES 
-((SELECT train_id FROM subway_system.train WHERE train_number = 32), (SELECT route_id FROM subway_system.routes WHERE line_id = 2) ,
+((SELECT train_id FROM subway_system.train WHERE train_number = 32), (SELECT route_id FROM subway_system.routes WHERE line_id = 2 LIMIT 1) ,
 (SELECT schedule_id FROM subway_system.schedules s JOIN subway_system.routes r ON s.route_id = r.route_id 
-WHERE s.departure_time = '16:00:00'::TIME AND r.line_id = 2 ) ,(SELECT employee_id FROM subway_system.employees WHERE UPPER(name) LIKE UPPER('Mather Jinks'))),
-((SELECT train_id FROM subway_system.train WHERE train_number = 322), (SELECT route_id FROM subway_system.routes WHERE line_id = 1),
+WHERE s.departure_time = '16:00:00'::TIME AND r.line_id = 2 LIMIT 1) ,(SELECT employee_id FROM subway_system.employees WHERE UPPER(name) LIKE UPPER('Mather Jinks'))),
+((SELECT train_id FROM subway_system.train WHERE train_number = 322), (SELECT route_id FROM subway_system.routes WHERE line_id = 1 LIMIT 1),
 (SELECT schedule_id FROM subway_system.schedules s JOIN subway_system.routes r ON s.route_id = r.route_id 
-WHERE s.departure_time = '16:00:00'::TIME AND r.line_id = 2 ), (SELECT employee_id FROM subway_system.employees WHERE UPPER(name) LIKE UPPER('Jil Mont')))
+WHERE s.departure_time = '16:00:00'::TIME AND r.line_id = 2 LIMIT 1 ), (SELECT employee_id FROM subway_system.employees WHERE UPPER(name) LIKE UPPER('Jil Mont')))
 ) AS new_train_operations (train_id, route_id, schedule_id,operator_id )
 WHERE NOT EXISTS (SELECT 1 FROM subway_system.train_operations t WHERE t.train_id = new_train_operations.train_id 
 														AND t.route_id = new_train_operations.route_id
@@ -292,9 +471,32 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.train_operations t WHERE t.train_i
 SELECT  * FROM subway_system.train_operations;
 
 --Add row
-ALTER TABLE subway_system.train_operations
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'train_operations'
+          AND column_name = 'record_ts'
+    ) THEN
+        ALTER TABLE subway_system.train_operations ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE;
+    END IF;
+
+    BEGIN
+        ALTER TABLE subway_system.train_operations ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE;
+    EXCEPTION WHEN OTHERS THEN
+        -- Ignore if already set
+        NULL;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'chk_train_operations_record_ts'
+    ) THEN
+        ALTER TABLE subway_system.train_operations
+        ADD CONSTRAINT chk_train_operations_record_ts CHECK (record_ts > '2000-01-01');
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.train_operations;
@@ -321,9 +523,34 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.infrastructure i WHERE i.type = ne
 SELECT  * FROM subway_system.infrastructure;
 
 --Add row
-ALTER TABLE subway_system.infrastructure
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'infrastructure'
+          AND column_name = 'record_ts'
+    ) THEN
+        ALTER TABLE subway_system.infrastructure
+        ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE;
+    END IF;
+
+    BEGIN
+        ALTER TABLE subway_system.infrastructure
+        ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE;
+    EXCEPTION WHEN OTHERS THEN
+        -- Ignore if already set
+        NULL;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'chk_infrastructure_record_ts'
+    ) THEN
+        ALTER TABLE subway_system.infrastructure
+        ADD CONSTRAINT chk_infrastructure_record_ts CHECK (record_ts > '2000-01-01');
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.infrastructure;
@@ -350,9 +577,36 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.maintenance_records m WHERE m.infr
 SELECT  * FROM subway_system.maintenance_records;
 
 --Add row
-ALTER TABLE subway_system.maintenance_records
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if not exists
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'maintenance_records'
+          AND column_name = 'record_ts'
+    ) THEN
+        ALTER TABLE subway_system.maintenance_records
+        ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE;
+    END IF;
+
+    -- Set default (in case it's not already)
+    BEGIN
+        ALTER TABLE subway_system.maintenance_records
+        ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE;
+    EXCEPTION WHEN OTHERS THEN
+        NULL; -- Silently ignore if already set
+    END;
+
+    -- Add check constraint only if not already there
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'chk_maintenance_record_ts'
+    ) THEN
+        ALTER TABLE subway_system.maintenance_records
+        ADD CONSTRAINT chk_maintenance_record_ts CHECK (record_ts > '2000-01-01');
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.maintenance_records;
@@ -363,8 +617,8 @@ CREATE TABLE IF NOT EXISTS subway_system.discount  (
     discount_id BIGSERIAL PRIMARY KEY,
     description VARCHAR(100) NOT NULL,
    	percentage DECIMAL(5,2) CHECK (percentage >= 0),
-   	valid_from DATETIME NOT NULL CHECK (valid_from > '2000-01-01'),
-    valid_to DATETIME NOT NULL CHECK (valid_to > '2000-01-01')
+   	valid_from TIMESTAMP  NOT NULL CHECK (valid_from > '2000-01-01'),
+    valid_to TIMESTAMP  NOT NULL CHECK (valid_to > '2000-01-01')
 ); 
 
 -- Inserting data
@@ -382,9 +636,36 @@ WHERE NOT EXISTS (SELECT 1 FROM subway_system.discount d WHERE d.description = n
 SELECT  * FROM subway_system.discount;
 
 --Add row
-ALTER TABLE subway_system.discount
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if it doesn't exist
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'discount'
+          AND column_name = 'record_ts'
+    ) THEN
+        ALTER TABLE subway_system.discount
+        ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE;
+    END IF;
+
+    -- Set the default (if not already)
+    BEGIN
+        ALTER TABLE subway_system.discount
+        ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE;
+    EXCEPTION WHEN OTHERS THEN
+        NULL; -- ignore if already set
+    END;
+
+    -- Add the check constraint if not already added
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'chk_discount_record_ts'
+    ) THEN
+        ALTER TABLE subway_system.discount
+        ADD CONSTRAINT chk_discount_record_ts CHECK (record_ts > '2000-01-01');
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.discount;
@@ -404,11 +685,11 @@ SELECT * FROM (
     ('One Way', 25.00, 
      (SELECT discount_id FROM subway_system.discount 
       WHERE UPPER(description) = UPPER('Child discount') 
-        AND valid_from = CURRENT_DATE)),
+        AND valid_from = CURRENT_DATE LIMIT 1)),
     ('Return', 40.00, 
      (SELECT discount_id FROM subway_system.discount 
       WHERE UPPER(description) = UPPER('Tuesday discount') 
-        AND valid_from = CURRENT_DATE))
+        AND valid_from = CURRENT_DATE LIMIT 1))
 ) AS new_ticket (type, price, discount_id)
 WHERE NOT EXISTS (
     SELECT 1 
@@ -421,9 +702,36 @@ WHERE NOT EXISTS (
 SELECT  * FROM subway_system.ticket;
 
 --Add row
-ALTER TABLE subway_system.ticket
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    -- Add column if missing
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'ticket'
+          AND column_name = 'record_ts'
+    ) THEN
+        ALTER TABLE subway_system.ticket
+        ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE;
+    END IF;
+
+    -- Ensure default is set
+    BEGIN
+        ALTER TABLE subway_system.ticket
+        ALTER COLUMN record_ts SET DEFAULT CURRENT_DATE;
+    EXCEPTION WHEN OTHERS THEN
+        NULL;
+    END;
+
+    -- Add check constraint only if missing
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.check_constraints
+        WHERE constraint_name = 'chk_ticket_record_ts'
+    ) THEN
+        ALTER TABLE subway_system.ticket
+        ADD CONSTRAINT chk_ticket_record_ts CHECK (record_ts > '2000-01-01');
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.ticket;
@@ -462,23 +770,43 @@ WHERE NOT EXISTS (
 SELECT  * FROM subway_system.ticket_sales;
 
 --Add row
-ALTER TABLE subway_system.ticket_sales
-ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE
-CHECK (record_ts > '2000-01-01');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'subway_system'
+          AND table_name = 'ticket_sales'
+          AND column_name = 'record_ts'
+    ) THEN
+        ALTER TABLE subway_system.ticket_sales
+        ADD COLUMN record_ts DATE DEFAULT CURRENT_DATE;
+    END IF;
+
+    -- Add check constraint for 'record_ts' only if not already added
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.check_constraints
+        WHERE constraint_name = 'chk_ticket_sales_record_ts'
+    ) THEN
+        ALTER TABLE subway_system.ticket_sales
+        ADD CONSTRAINT chk_ticket_sales_record_ts CHECK (record_ts > '2000-01-01');
+    END IF;
+END $$;
 
 --Show added data in table with extra rows
 SELECT  * FROM subway_system.ticket_sales;
 
 -- 15. Passanger table
 CREATE TABLE IF NOT EXISTS subway_system.passanger (
-    passanger_id BIGSERIAL PRIMARY KEY,
+    passenger_id BIGSERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL,
    	surname VARCHAR(50) NOT NULL,
    	ticket_id INT NOT NULL REFERENCES subway_system.ticket(ticket_id)
 );
 
 -- Inserting data
-INSERT INTO subway_system.passanger (name, surname, ticket_id)
+INSERT INTO subway_system.passenger (name, surname, ticket_id)
 SELECT new_data.name, new_data.surname, t.ticket_id
 FROM (
     VALUES 
@@ -489,13 +817,13 @@ JOIN subway_system.ticket t
   ON UPPER(t.type) = UPPER(new_data.type)
  AND t.discount_id = new_data.discount_id
 WHERE NOT EXISTS (
-    SELECT 1 FROM subway_system.passanger p
-    WHERE p.name = new_ data.name 
+    SELECT 1 FROM subway_system.passenger p
+    WHERE p.name = new_data.name 
       AND p.surname = new_data.surname 
       AND p.ticket_id = t.ticket_id
 );
 --Show added data in table
-SELECT  * FROM subway_system.passanger;
+SELECT  * FROM subway_system.passenger;
 
 --Add row
 DO $$
@@ -503,9 +831,9 @@ BEGIN
     -- Add the column if it doesn't exist
     IF NOT EXISTS (SELECT 1 
                    FROM information_schema.columns 
-                   WHERE table_name = 'passanger' 
+                   WHERE table_name = 'passenger' 
                      AND column_name = 'record_ts') THEN
-        ALTER TABLE subway_system.passanger
+        ALTER TABLE subway_system.passenger
         ADD COLUMN record_ts DATE NOT NULL DEFAULT CURRENT_DATE;
     END IF;
 
@@ -514,15 +842,15 @@ BEGIN
                    FROM information_schema.table_constraints tc
                    JOIN information_schema.constraint_column_usage ccu 
                    ON tc.constraint_name = ccu.constraint_name
-                   WHERE tc.table_name = 'passanger'
+                   WHERE tc.table_name = 'passenger'
                      AND tc.constraint_type = 'CHECK'
                      AND ccu.column_name = 'record_ts'
                      AND tc.constraint_name = 'record_ts_check') THEN
-        ALTER TABLE subway_system.passanger
+        ALTER TABLE subway_system.passenger
         ADD CONSTRAINT record_ts_check CHECK (record_ts > '2000-01-01');
     END IF;
 END $$;
 
 --Show added data in table with extra rows
-SELECT  * FROM subway_system.passanger;
+SELECT  * FROM subway_system.passenger;
 
