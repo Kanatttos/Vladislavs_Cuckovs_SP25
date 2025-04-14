@@ -17,9 +17,7 @@ Unfortunately, not all of them are implemented in this function. Try to change f
 5.* How do ‘group_concat’ and ‘_group_concat’ functions work? (database creation script might help) Where are they used?
 ‘_group_concat’ combine to string with a comma, but ‘group_concat’ allow to apply ‘_group_concat’ fucntion repeatedly and could be used in GROUP BY clause. 
 6.* What does ‘last_updated’ function do? Where is it used?
- return last day of the month
+ return last day of the month.
 7.* What is tmpSQL variable for in ‘rewards_report’ function? Can this function be recreated without EXECUTE statement and dynamic SQL? Why?
  It is used to build a dynamic SQL sring. Yes it can be written without dynamic SQL that improve speed and more readable.
-
-
 
