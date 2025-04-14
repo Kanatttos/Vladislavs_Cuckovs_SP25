@@ -1,0 +1,389 @@
+-- 1 Create a view called 'sales_revenue_by_category_qtr' that shows the film category and total sales revenue for the current quarter
+-- and year. The view should only display categories with at least one sale in the current quarter. 
+-- DROP VIEW IF EXISTS to ensure rerunnable behavior
+DROP VIEW IF EXISTS public.sales_revenue_by_category_qtr;
+
+-- Create the view
+CREATE VIEW public.sales_revenue_by_category_qtr AS
+WITH current_quarter AS (
+    SELECT 
+        EXTRACT(YEAR FROM CURRENT_DATE)::INT AS current_year,
+        EXTRACT(QUARTER FROM CURRENT_DATE)::INT AS current_quarter
+),
+category_sales AS (
+    SELECT 
+        c.name AS category_name,
+        SUM(p.amount)::NUMERIC(10,2) AS total_revenue,
+        EXTRACT(YEAR FROM p.payment_date)::INT AS payment_year,
+        EXTRACT(QUARTER FROM p.payment_date)::INT AS payment_quarter
+    FROM 
+        payment p
+        JOIN rental r ON p.rental_id = r.rental_id
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN film f ON i.film_id = f.film_id
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+    GROUP BY 
+        c.name, payment_year, payment_quarter
+)
+SELECT 
+    cs.category_name,
+    cs.total_revenue,
+    cs.payment_year,
+    cs.payment_quarter
+FROM 
+    category_sales cs
+    JOIN current_quarter cq 
+      ON cs.payment_year = cq.current_year 
+     AND cs.payment_quarter = cq.current_quarter
+WHERE 
+    cs.total_revenue > 0;
+
+--use
+SELECT * FROM public.sales_revenue_by_category_qtr;
+
+
+--2Create a query language function called 'get_sales_revenue_by_category_qtr' that accepts one parameter representing 
+--the current quarter and year and returns the same result as the 'sales_revenue_by_category_qtr' view.
+
+
+--
+-- Drop the function if it already exists to avoid duplicates
+DROP FUNCTION IF EXISTS public.get_sales_revenue_by_category_qtr(INT, INT);
+
+-- Create the function
+CREATE OR REPLACE FUNCTION public.get_sales_revenue_by_category_qtr(
+    in_quarter INT,
+    in_year INT
+)
+RETURNS TABLE (
+    category_name VARCHAR,
+    total_revenue NUMERIC(10,2),
+    payment_year INT,
+    payment_quarter INT
+)
+LANGUAGE sql
+AS $$
+    -- Validate inputs
+    SELECT 
+        c.name AS category_name,
+        SUM(p.amount)::NUMERIC(10,2) AS total_revenue,
+        EXTRACT(YEAR FROM p.payment_date)::INT AS payment_year,
+        EXTRACT(QUARTER FROM p.payment_date)::INT AS payment_quarter
+    FROM 
+        payment p
+        JOIN rental r ON p.rental_id = r.rental_id
+        JOIN inventory i ON r.inventory_id = i.inventory_id
+        JOIN film f ON i.film_id = f.film_id
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+    WHERE 
+        EXTRACT(YEAR FROM p.payment_date) = in_year
+        AND EXTRACT(QUARTER FROM p.payment_date) = in_quarter
+    GROUP BY 
+        c.name, payment_year, payment_quarter
+    HAVING 
+        SUM(p.amount) > 0;
+$$;
+
+-- use
+SELECT * FROM public.get_sales_revenue_by_category_qtr(2, 2017);
+
+
+--3 Create a function that takes a country as an input parameter and 
+--returns the most popular film in that specific country.
+-- Drop existing function for clean rerun
+DROP FUNCTION IF EXISTS core.most_popular_films_by_countries(TEXT[]);
+
+CREATE OR REPLACE FUNCTION core.most_popular_films_by_countries(country_list TEXT[])
+RETURNS TABLE (
+    country TEXT,
+    film TEXT,
+    rating TEXT,
+    language TEXT,
+    length INT,
+    release_year INT
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF array_length(country_list, 1) IS NULL THEN
+        RAISE EXCEPTION 'Input country list cannot be null or empty';
+    END IF;
+
+    RETURN QUERY
+    SELECT DISTINCT ON (co.country)
+        co.country,
+        f.title AS film,
+        f.rating::TEXT,
+        l.name::TEXT AS language,
+        f.length::INT,
+        f.release_year::INT
+    FROM rental r
+    JOIN customer c ON r.customer_id = c.customer_id
+    JOIN address a ON c.address_id = a.address_id
+    JOIN city ci ON a.city_id = ci.city_id
+    JOIN country co ON ci.country_id = co.country_id
+    JOIN inventory i ON r.inventory_id = i.inventory_id
+    JOIN film f ON i.film_id = f.film_id
+    JOIN language l ON f.language_id = l.language_id
+    WHERE co.country = ANY (country_list)
+    GROUP BY co.country, f.title, f.rating, l.name, f.length, f.release_year
+    ORDER BY co.country, COUNT(r.rental_id) DESC;
+END;
+$$;
+--use
+SELECT * FROM core.most_popular_films_by_countries(ARRAY['Afghanistan', 'Brazil', 'United States']);
+
+--4Create a function that generates a list of movies available in stock based on 
+--a partial title match (e.g., movies containing the word 'love' in their title).
+CREATE OR REPLACE FUNCTION core.films_in_stock_by_title(title_pattern TEXT)
+RETURNS TABLE (
+    row_num INT,
+    film_title TEXT,
+    language TEXT,
+    customer_name TEXT,
+    rental_date TIMESTAMP
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH matching_films AS (
+        SELECT
+            f.film_id,
+            f.title AS mf_title,
+            l.name AS mf_language
+        FROM film f
+        JOIN language l ON f.language_id = l.language_id
+        WHERE f.title ILIKE title_pattern
+    ),
+    rental_data AS (
+        SELECT
+            r.rental_date AS rd_rental_date,
+            r.inventory_id,
+            c.first_name || ' ' || c.last_name AS rd_customer_name
+        FROM rental r
+        JOIN customer c ON r.customer_id = c.customer_id
+    ),
+    available_inventory AS (
+        SELECT
+            i.film_id,
+            i.inventory_id
+        FROM inventory i
+        LEFT JOIN rental r ON i.inventory_id = r.inventory_id
+        WHERE r.return_date IS NOT NULL
+    ),
+    film_stock AS (
+        SELECT DISTINCT
+            mf.mf_title,
+            mf.mf_language,
+            rd.rd_customer_name,
+            rd.rd_rental_date
+        FROM matching_films mf
+        JOIN available_inventory ai ON mf.film_id = ai.film_id
+        LEFT JOIN rental_data rd ON ai.inventory_id = rd.inventory_id
+    )
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY mf_title)::INT,
+        mf_title::TEXT,
+        mf_language::TEXT,
+        COALESCE(rd_customer_name, '-') AS customer_name,
+        rd_rental_date::TIMESTAMP AS rental_date 
+    FROM film_stock;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No films found in stock with title matching %', title_pattern;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+SELECT * FROM core.films_in_stock_by_title('%love%');
+
+
+--5Create a procedure language function called 'new_movie' that takes a movie title as a parameter and inserts a 
+--new movie with the given title in the film table. The function should generate a new unique film ID, 
+--set the rental rate to 4.99, the rental duration to three days, the replacement cost to 19.99. 
+--The release year and language are optional and by default should be current year and Klingon respectively. 
+--The function should also verify that the language exists in the 'language' table. 
+--Then, ensure that no such function has been created before; if so, replace it.
+
+DROP FUNCTION IF EXISTS core.new_movie(TEXT, INTEGER, TEXT);
+
+CREATE OR REPLACE FUNCTION core.new_movie(
+    movie_title TEXT,
+    movie_release_year INTEGER DEFAULT EXTRACT(YEAR FROM CURRENT_DATE),
+    lang_name TEXT DEFAULT 'Klingon'
+) RETURNS VOID AS
+$$
+DECLARE
+    lang_id INTEGER;
+    new_film_id INTEGER;
+BEGIN
+    -- Validate title
+    IF movie_title IS NULL OR TRIM(movie_title) = '' THEN
+        RAISE EXCEPTION 'Movie title cannot be null or empty';
+    END IF;
+
+    -- Check if the language exists,
+    SELECT language_id INTO lang_id
+    FROM language
+    WHERE name = lang_name;
+
+  IF lang_id IS NULL THEN
+        INSERT INTO language (name) VALUES (lang_name)
+        RETURNING language_id INTO lang_id;
+    END IF;
+
+    -- Generate a new film_id
+    SELECT MAX(film_id) + 1 INTO new_film_id FROM film;
+
+    -- Check for duplicates
+    IF EXISTS (
+        SELECT 1 FROM film 
+        WHERE title = movie_title AND release_year = movie_release_year AND language_id = lang_id
+    ) THEN
+        RAISE EXCEPTION 'Movie "%" already exists for language "%" and year %',
+            movie_title, lang_name, movie_release_year;
+    END IF;
+
+    -- Insert new film
+    INSERT INTO film (
+        film_id, title, release_year, language_id,
+        rental_duration, rental_rate, replacement_cost
+    ) VALUES (
+        new_film_id, movie_title, movie_release_year, lang_id,
+        3, 4.99, 19.99
+    );
+
+    RAISE NOTICE 'New movie "%" added with ID %', movie_title, new_film_id;
+END;
+$$ LANGUAGE plpgsql;
+
+--Use
+SELECT core.new_movie('Pirates of the Caribbean: Dead Man''s Chest', 2006, 'English');
+
+--Test for 6
+
+CREATE OR REPLACE FUNCTION public.rewards_report(
+    min_monthly_purchases INTEGER,
+    min_dollar_amount_purchased NUMERIC
+)
+RETURNS SETOF customer
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $function$
+DECLARE
+    last_month_start DATE;
+    last_month_end DATE;
+    rr RECORD;
+BEGIN
+    -- Validation
+    IF min_monthly_purchases <= 0 THEN
+        RAISE EXCEPTION 'Minimum monthly purchases must be > 0';
+    END IF;
+    IF min_dollar_amount_purchased <= 0 THEN
+        RAISE EXCEPTION 'Minimum dollar amount must be > 0.00';
+    END IF;
+
+    -- Set range to last full month
+    last_month_start := date_trunc('month', CURRENT_DATE - INTERVAL '1 month')::DATE;
+    last_month_end := (date_trunc('month', CURRENT_DATE))::DATE - INTERVAL '1 day';
+
+    -- DEBUG NOTICE
+    RAISE NOTICE 'Date range: % to %', last_month_start, last_month_end;
+
+    -- Temp table for qualifying customers
+    CREATE TEMP TABLE tmpCustomer (customer_id INTEGER PRIMARY KEY) ON COMMIT DROP;
+
+    -- Insert qualifying customer IDs
+    INSERT INTO tmpCustomer (customer_id)
+    SELECT p.customer_id
+    FROM payment p
+    WHERE DATE(p.payment_date) BETWEEN last_month_start AND last_month_end
+    GROUP BY p.customer_id
+    HAVING COUNT(*) >= min_monthly_purchases
+       AND SUM(p.amount) >= min_dollar_amount_purchased;
+
+    -- Return customer details
+    FOR rr IN
+        SELECT c.* FROM tmpCustomer t
+        JOIN customer c ON c.customer_id = t.customer_id
+    LOOP
+        RETURN NEXT rr;
+    END LOOP;
+
+    RETURN;
+END
+$function$;
+
+--6 get_customer_balance
+
+CREATE OR REPLACE FUNCTION public.get_customer_balance(
+    p_customer_id INTEGER,
+    p_effective_date TIMESTAMPTZ
+)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+AS $function$
+DECLARE
+    v_rentfees NUMERIC(5,2);   -- 1) rental fees
+    v_overfees NUMERIC(5,2);   -- 2) late fees
+    v_replacement NUMERIC(5,2);-- 3) replacement cost for overdue
+    v_payments NUMERIC(5,2);   -- 4) payments made
+BEGIN
+    -- 1) Rental fees for all previous rentals
+    SELECT COALESCE(SUM(f.rental_rate), 0)
+    INTO v_rentfees
+    FROM film f
+    JOIN inventory i ON f.film_id = i.film_id
+    JOIN rental r ON r.inventory_id = i.inventory_id
+    WHERE r.rental_date <= p_effective_date
+      AND r.customer_id = p_customer_id;
+
+    -- 2) $1 per day overdue, but not beyond 2x rental_duration
+    SELECT COALESCE(SUM(
+        CASE 
+            WHEN r.return_date IS NOT NULL AND 
+                 r.return_date > r.rental_date + (f.rental_duration * INTERVAL '1 day')
+            THEN LEAST(
+                EXTRACT(DAY FROM r.return_date - r.rental_date - (f.rental_duration * INTERVAL '1 day')),
+                f.rental_duration
+            )
+            ELSE 0
+        END
+    ), 0)
+    INTO v_overfees
+    FROM film f
+    JOIN inventory i ON f.film_id = i.film_id
+    JOIN rental r ON r.inventory_id = i.inventory_id
+    WHERE r.rental_date <= p_effective_date
+      AND r.customer_id = p_customer_id;
+
+    -- 3) Replacement cost if overdue more than 2x rental duration
+    SELECT COALESCE(SUM(
+        CASE 
+            WHEN r.return_date IS NOT NULL AND 
+                 r.return_date > r.rental_date + (f.rental_duration * INTERVAL '2 day')
+            THEN f.replacement_cost
+            ELSE 0
+        END
+    ), 0)
+    INTO v_replacement
+    FROM film f
+    JOIN inventory i ON f.film_id = i.film_id
+    JOIN rental r ON r.inventory_id = i.inventory_id
+    WHERE r.rental_date <= p_effective_date
+      AND r.customer_id = p_customer_id;
+
+    -- 4) Subtract all payments before the given date
+    SELECT COALESCE(SUM(p.amount), 0)
+    INTO v_payments
+    FROM payment p
+    WHERE p.payment_date <= p_effective_date
+      AND p.customer_id = p_customer_id;
+
+    -- Return total balance
+    RETURN v_rentfees + v_overfees + v_replacement - v_payments;
+END
+$function$;
