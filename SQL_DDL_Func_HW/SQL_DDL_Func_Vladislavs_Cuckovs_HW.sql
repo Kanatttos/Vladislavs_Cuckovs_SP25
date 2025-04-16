@@ -11,32 +11,32 @@ WITH current_quarter AS (
 ),
 category_sales AS (
     SELECT 
-        c.name AS category_name,
-        SUM(p.amount)::NUMERIC(10,2) AS total_revenue,
-        EXTRACT(YEAR FROM p.payment_date)::INT AS payment_year,
-        EXTRACT(QUARTER FROM p.payment_date)::INT AS payment_quarter
+        public.category.name AS category_name,
+        SUM(public.payment.amount)::NUMERIC(10,2) AS total_revenue,
+        EXTRACT(YEAR FROM public.payment.payment_date)::INT AS payment_year,
+        EXTRACT(QUARTER FROM public.payment.payment_date)::INT AS payment_quarter
     FROM 
-        public.payment p
-        JOIN public.rental r ON p.rental_id = r.rental_id
-        JOIN public.inventory i ON r.inventory_id = i.inventory_id
-        JOIN public.film f ON i.film_id = f.film_id
-        JOIN public.film_category fc ON f.film_id = fc.film_id
-        JOIN public.category c ON fc.category_id = c.category_id
+        public.payment
+        JOIN public.rental ON public.payment.rental_id = public.rental.rental_id
+        JOIN public.inventory ON public.rental.inventory_id = public.inventory.inventory_id
+        JOIN public.film ON public.inventory.film_id = public.film.film_id
+        JOIN public.film_category ON public.film.film_id = public.film_category.film_id
+        JOIN public.category ON public.film_category.category_id = public.category.category_id
     GROUP BY 
-        c.name, payment_year, payment_quarter
+        public.category.name, payment_year, payment_quarter
 )
 SELECT 
-    cs.category_name,
-    cs.total_revenue,
-    cs.payment_year,
-    cs.payment_quarter
+    category_sales.category_name,
+    category_sales.total_revenue,
+    category_sales.payment_year,
+    category_sales.payment_quarter
 FROM 
-    category_sales cs
-    JOIN current_quarter cq 
-      ON cs.payment_year = cq.current_year 
-     AND cs.payment_quarter = cq.current_quarter
+    category_sales
+    JOIN current_quarter 
+      ON category_sales.payment_year = current_quarter.current_year 
+     AND category_sales.payment_quarter = current_quarter.current_quarter
 WHERE 
-    cs.total_revenue > 0;
+    category_sales.total_revenue > 0;
 
 --use
 SELECT * FROM public.sales_revenue_by_category_qtr;
@@ -58,28 +58,26 @@ RETURNS TABLE (
 )
 LANGUAGE sql
 AS $$
-    -- Validate inputs
     SELECT 
-        c.name AS category_name,
-        SUM(p.amount)::NUMERIC(10,2) AS total_revenue,
-        EXTRACT(YEAR FROM p.payment_date)::INT AS payment_year,
-        EXTRACT(QUARTER FROM p.payment_date)::INT AS payment_quarter
+        public.category.name AS category_name,
+        SUM(public.payment.amount)::NUMERIC(10,2) AS total_revenue,
+        EXTRACT(YEAR FROM public.payment.payment_date)::INT AS payment_year,
+        EXTRACT(QUARTER FROM public.payment.payment_date)::INT AS payment_quarter
     FROM 
-        public.payment p
-        JOIN public.rental r ON p.rental_id = r.rental_id
-        JOIN public.inventory i ON r.inventory_id = i.inventory_id
-        JOIN public.film f ON i.film_id = f.film_id
-        JOIN public.film_category fc ON f.film_id = fc.film_id
-        JOIN public.category c ON fc.category_id = c.category_id
+        public.payment
+        JOIN public.rental ON public.payment.rental_id = public.rental.rental_id
+        JOIN public.inventory ON public.rental.inventory_id = public.inventory.inventory_id
+        JOIN public.film ON public.inventory.film_id = public.film.film_id
+        JOIN public.film_category ON public.film.film_id = public.film_category.film_id
+        JOIN public.category ON public.film_category.category_id = public.category.category_id
     WHERE 
-        EXTRACT(YEAR FROM p.payment_date) = in_year
-        AND EXTRACT(QUARTER FROM p.payment_date) = in_quarter
+        EXTRACT(YEAR FROM public.payment.payment_date) = in_year
+        AND EXTRACT(QUARTER FROM public.payment.payment_date) = in_quarter
     GROUP BY 
-        c.name, payment_year, payment_quarter
+        public.category.name, payment_year, payment_quarter
     HAVING 
-        SUM(p.amount) > 0;
+        SUM(public.payment.amount) > 0;
 $$;
-
 -- use
 SELECT * FROM public.get_sales_revenue_by_category_qtr(2, 2017);
 
@@ -105,26 +103,35 @@ BEGIN
     END IF;
 
     RETURN QUERY
-    SELECT DISTINCT ON (co.country)
-        co.country,
-        f.title AS film,
-        f.rating::TEXT,
-        l.name::TEXT AS language,
-        f.length::INT,
-        f.release_year::INT
-    FROM public.rental r
-    JOIN public.customer c ON r.customer_id = c.customer_id
-    JOIN public.address a ON c.address_id = a.address_id
-    JOIN public.city ci ON a.city_id = ci.city_id
-    JOIN public.country co ON ci.country_id = co.country_id
-    JOIN public.inventory i ON r.inventory_id = i.inventory_id
-    JOIN public.film f ON i.film_id = f.film_id
-    JOIN public.language l ON f.language_id = l.language_id
-    WHERE co.country = ANY (country_list)
-    GROUP BY co.country, f.title, f.rating, l.name, f.length, f.release_year
-    ORDER BY co.country, COUNT(r.rental_id) DESC;
+    SELECT DISTINCT ON (public.country.country)
+        public.country.country,
+        public.film.title AS film,
+        public.film.rating::TEXT,
+        public.language.name::TEXT AS language,
+        public.film.length::INT,
+        public.film.release_year::INT
+    FROM public.rental
+    JOIN public.customer ON public.rental.customer_id = public.customer.customer_id
+    JOIN public.address ON public.customer.address_id = public.address.address_id
+    JOIN public.city ON public.address.city_id = public.city.city_id
+    JOIN public.country ON public.city.country_id = public.country.country_id
+    JOIN public.inventory ON public.rental.inventory_id = public.inventory.inventory_id
+    JOIN public.film ON public.inventory.film_id = public.film.film_id
+    JOIN public.language ON public.film.language_id = public.language.language_id
+    WHERE public.country.country = ANY (country_list)
+    GROUP BY 
+        public.country.country, 
+        public.film.title, 
+        public.film.rating, 
+        public.language.name, 
+        public.film.length, 
+        public.film.release_year
+    ORDER BY 
+        public.country.country, 
+        COUNT(public.rental.rental_id) DESC;
 END;
 $$;
+
 --use
 SELECT * FROM public.most_popular_films_by_countries(ARRAY['Afghanistan', 'Brazil', 'United States']);
 
@@ -142,38 +149,38 @@ BEGIN
     RETURN QUERY
     WITH matching_films AS (
         SELECT
-            f.film_id,
-            f.title AS mf_title,
-            l.name AS mf_language
-        FROM public.film f
-        JOIN public.language l ON f.language_id = l.language_id
-        WHERE f.title ILIKE title_pattern
+            public.film.film_id,
+            public.film.title AS mf_title,
+            public.language.name AS mf_language
+        FROM public.film
+        JOIN public.language ON public.film.language_id = public.language.language_id
+        WHERE UPPER(public.film.title) ILIKE UPPER(title_pattern)
     ),
     rental_data AS (
         SELECT
-            r.rental_date AS rd_rental_date,
-            r.inventory_id,
-            c.first_name || ' ' || c.last_name AS rd_customer_name
-        FROM public.rental r
-        JOIN public.customer c ON r.customer_id = c.customer_id
+            public.rental.rental_date AS rd_rental_date,
+            public.rental.inventory_id,
+            public.customer.first_name || ' ' || public.customer.last_name AS rd_customer_name
+        FROM public.rental
+        JOIN public.customer ON public.rental.customer_id = public.customer.customer_id
     ),
     available_inventory AS (
         SELECT
-            i.film_id,
-            i.inventory_id
-        FROM public.inventory i
-        LEFT JOIN public.rental r ON i.inventory_id = r.inventory_id
-        WHERE r.return_date IS NOT NULL
+            public.inventory.film_id,
+            public.inventory.inventory_id
+        FROM public.inventory
+        LEFT JOIN public.rental ON public.inventory.inventory_id = public.rental.inventory_id
+        WHERE public.rental.return_date IS NOT NULL
     ),
     film_stock AS (
         SELECT DISTINCT
-            mf.mf_title,
-            mf.mf_language,
-            rd.rd_customer_name,
-            rd.rd_rental_date
-        FROM matching_films mf
-        JOIN available_inventory ai ON mf.film_id = ai.film_id
-        LEFT JOIN rental_data rd ON ai.inventory_id = rd.inventory_id
+            matching_films.mf_title,
+            matching_films.mf_language,
+            rental_data.rd_customer_name,
+            rental_data.rd_rental_date
+        FROM matching_films
+        JOIN available_inventory ON matching_films.film_id = available_inventory.film_id
+        LEFT JOIN rental_data ON available_inventory.inventory_id = rental_data.inventory_id
     )
     SELECT
         ROW_NUMBER() OVER (ORDER BY mf_title)::INT,
@@ -200,7 +207,6 @@ SELECT * FROM public.films_in_stock_by_title('%love%');
 --The release year and language are optional and by default should be current year and Klingon respectively. 
 --The function should also verify that the language exists in the 'language' table. 
 --Then, ensure that no such function has been created before; if so, replace it.
-
 CREATE OR REPLACE FUNCTION public.new_movie(
     movie_title TEXT,
     movie_release_year INTEGER DEFAULT EXTRACT(YEAR FROM CURRENT_DATE),
@@ -216,30 +222,35 @@ BEGIN
         RAISE EXCEPTION 'Movie title cannot be null or empty';
     END IF;
 
-    -- Check if the language exists,
-    SELECT language_id INTO lang_id
+    -- Check if the language exists
+    SELECT public.language.language_id INTO lang_id
     FROM public.language
-    WHERE name = lang_name;
+    WHERE UPPER(public.language.name) = UPPER(lang_name);
 
-  IF lang_id IS NULL THEN
-        INSERT INTO language (name) VALUES (lang_name)
-        RETURNING language_id INTO lang_id;
+    IF lang_id IS NULL THEN
+        INSERT INTO public.language (name)
+        VALUES (lang_name)
+        RETURNING public.language.language_id INTO lang_id;
     END IF;
 
     -- Generate a new film_id
-    SELECT MAX(film_id) + 1 INTO new_film_id FROM film;
+    SELECT MAX(public.film.film_id) + 1 INTO new_film_id
+    FROM public.film;
 
     -- Check for duplicates
     IF EXISTS (
-        SELECT 1 FROM film 
-        WHERE title = movie_title AND release_year = movie_release_year AND language_id = lang_id
+        SELECT 1
+        FROM public.film
+        WHERE UPPER(public.film.title) = UPPER(movie_title)
+          AND public.film.release_year = movie_release_year
+          AND public.film.language_id = lang_id
     ) THEN
         RAISE EXCEPTION 'Movie "%" already exists for language "%" and year %',
             movie_title, lang_name, movie_release_year;
     END IF;
 
     -- Insert new film
-    INSERT INTO film (
+    INSERT INTO public.film (
         film_id, title, release_year, language_id,
         rental_duration, rental_rate, replacement_cost
     ) VALUES (
@@ -255,12 +266,11 @@ $$ LANGUAGE plpgsql;
 SELECT public.new_movie('Pirates of the Caribbean: Dead Man''s Chest', 2006, 'English');
 
 --Test for 6
-
 CREATE OR REPLACE FUNCTION public.rewards_report(
     min_monthly_purchases INTEGER,
     min_dollar_amount_purchased NUMERIC
 )
-RETURNS SETOF customer
+RETURNS SETOF public.customer
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $function$
@@ -285,10 +295,10 @@ BEGIN
     RAISE NOTICE 'Date range: % to %', last_month_start, last_month_end;
 
     -- Temp table for qualifying customers
-    CREATE TEMP TABLE tmpCustomer (customer_id INTEGER PRIMARY KEY) ON COMMIT DROP;
+    CREATE TEMP TABLE public.tmpCustomer (customer_id INTEGER PRIMARY KEY) ON COMMIT DROP;
 
     -- Insert qualifying customer IDs
-    INSERT INTO tmpCustomer (customer_id)
+    INSERT INTO public.tmpCustomer (customer_id)
     SELECT p.customer_id
     FROM public.payment p
     WHERE DATE(p.payment_date) BETWEEN last_month_start AND last_month_end
@@ -307,6 +317,7 @@ BEGIN
     RETURN;
 END
 $function$;
+
 
 --6 get_customer_balance
 
